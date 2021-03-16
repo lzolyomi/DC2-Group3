@@ -1,4 +1,4 @@
 */data
-*/*.csv
+*.csv
 /.vscode
 *.png
