@@ -18,7 +18,9 @@ def prepare_data(filtered_transactions):
         filtered_transactions["purchase_price"]/filtered_transactions["std_sales_price"])*100
 
     #group by item and day, return summary stats of discount table
-    purchases = filtered_transactions.groupby(["description", "day"]).describe()["discount"]
+    purchases_grouped = filtered_transactions.groupby(["description", "day"]).describe()
+    pp = purchases_grouped["purchase_price"]["mean"]
+    purchases = purchases_grouped["discount"]
     #add months column
     purchases["month"] = [purchases.index[i][1].month_name() for i in range(purchases.shape[0])]
     #add product column containing the name of each item
@@ -28,11 +30,15 @@ def prepare_data(filtered_transactions):
     #add day of week for predictor
     purchases["dayofweek"] = [purchases.index[i][1].dayofweek for i in range(purchases.shape[0])]
     purchases["dayofweek"].replace({0:"Monday", 1:"Tuesday", 2:"Wednesday", 3:"Thursday", 4:"Friday", 5:"Saturday", 6:"Sunday"}, inplace=True)
+    purchases["purchase_price"] = pp
     purchases.rename(columns={"mean":"discount"}, inplace=True)
     #add square of discount as extra predictor
     purchases["discount_2"] = purchases["discount"]**2
 
-    #other features: standard price, purchase price
+    # TODO:other features: standard price, purchase price
+    #take logarithm of price and log of count 
+    # run it for one product only
+    # find a t-test for coefficients
 
     return purchases
 
@@ -52,9 +58,10 @@ def prepare_demand_function(df_prepared):
     product, weekday and months one hot encoding
     """
     #columns used as predictors
-    pred_columns = ["discount", "discount_2"]
+    pred_columns = ["discount", "discount_2", "purchase_price"]
     target_col = "count"
     #encoding products
+    # TODO: see if works with only one product
     df_products, enc_product = fit_ohc(df_prepared[["product"]])
     #encoding weekdays
     df_weekday, enc_weekday = fit_ohc(df_prepared[["dayofweek"]])    
@@ -79,7 +86,7 @@ def prepare_demand_function(df_prepared):
     return summary_dct
 
 
-def fit_demand_function(input_dct, model):
+def fit_demand_function(input_dct, model = Ridge()):
     """
     Fits a Ridge regression as a demand function
     input: a dictionary which at least has train and test containing a list of X and y data
@@ -93,7 +100,8 @@ def fit_demand_function(input_dct, model):
     linreg.fit(X_train, y_train)
     mae = mean_absolute_error(y_test, linreg.predict(X_test))
     mse = mean_squared_error(y_test, linreg.predict(X_test))
-    print("Ridge regression fitted; test set metrics: MAE: {} MSE: {}".format(mae, mse))
+    r_score = linreg.score(X_test, y_test)
+    print("Model fitted; test set metrics: MAE: {} MSE: {}, R^2 score: {}".format(mae, mse, r_score))
 
     return linreg
 
