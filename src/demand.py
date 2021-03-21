@@ -1,20 +1,21 @@
 import pandas as pd 
 import numpy as np 
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.linear_model import Ridge
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-def prepare_demand_function(filtered_transactions):
+def prepare_data(filtered_transactions):
     """
     The function accepts a filtered version of the transactions dataframe,
     and prepares it for a demand function
     """
-    return_dct = dict() #dictionary for return values
+
     #converts day to datetime
     filtered_transactions["day"] = pd.to_datetime(filtered_transactions["day"])
 
     #adds discount column
     filtered_transactions["discount"] = 100-(
         filtered_transactions["purchase_price"]/filtered_transactions["std_sales_price"])*100
-    return_dct["items"] = filtered_transactions["description"].unique()
 
     #group by item and day, return summary stats of discount table
     purchases = filtered_transactions.groupby(["description", "day"]).describe()["discount"]
@@ -31,6 +32,8 @@ def prepare_demand_function(filtered_transactions):
     #add square of discount as extra predictor
     purchases["discount_2"] = purchases["discount"]**2
 
+    #other features: standard price, purchase price
+
     return purchases
 
 
@@ -41,11 +44,12 @@ def fit_ohc(pd_column):
     df = pd.DataFrame(encoder.transform(pd_column), columns=encoder.get_feature_names())
     return df, encoder
 
-def fit_demand_function(df_prepared):
+def prepare_demand_function(df_prepared):
     """
     fits a linear regression as a demand function.
     Used predictors are: product, discount, discount^2, day of week, month
-    returns: TODO
+    returns: dictionary with train X, y test X, y and the encoders used for 
+    product, weekday and months one hot encoding
     """
     #columns used as predictors
     pred_columns = ["discount", "discount_2"]
@@ -70,14 +74,32 @@ def fit_demand_function(df_prepared):
     X_test = pd.concat([test[pred_columns], test.filter(regex="x0_")], axis=1)
     y_test = test[target_col].values
 
-    summary_dct = {"train":[X_train, y_train], "test":[X_test, y_test],
-     "product_enc":enc_product, "weekday_enc":enc_weekday,"months_enc":enc_months}
+    summary_dct = {"train":[X_train, y_train], "test":[X_test, y_test],"product_enc":enc_product, "weekday_enc":enc_weekday,"months_enc":enc_months}
 
     return summary_dct
 
 
-transactions = pd.read_csv(r"C:\Users\zolyo\OneDrive\Documents\Quartile 3\JBG050 Data Challenge 2\Code\src\data\transactions.csv")
-filt_transactions = transactions[(transactions["category"] == "vegetable") & (transactions["bio"] == 1)]
+def fit_demand_function(input_dct, model):
+    """
+    Fits a Ridge regression as a demand function
+    input: a dictionary which at least has train and test containing a list of X and y data
+    returns: fitted Ridge regressor object
+    """
 
-test = prepare_demand_function(filt_transactions)
-print(test.head())
+    X_train, y_train = input_dct["train"][0], input_dct["train"][1]
+    X_test, y_test = input_dct["test"][0], input_dct['test'][1]
+
+    linreg = model
+    linreg.fit(X_train, y_train)
+    mae = mean_absolute_error(y_test, linreg.predict(X_test))
+    mse = mean_squared_error(y_test, linreg.predict(X_test))
+    print("Ridge regression fitted; test set metrics: MAE: {} MSE: {}".format(mae, mse))
+
+    return linreg
+
+def prepare_predictors(df_prep, input_dct):
+    """
+    accepts a dataframe prepared by the `prepare_data` function, and a dict with the onehot encoders
+    returns a formatted dataframe suitable for predicting with the linear regr
+    """
+    
