@@ -4,10 +4,11 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-def prepare_data(filtered_transactions):
+def prepare_data(filtered_transactions, discounts_per_day=False):
     """
     The function accepts a filtered version of the transactions dataframe,
     and prepares it for a demand function
+    OPTIONAL: supply the discounts_per_day dataframe for added predictor
     """
 
     #converts day to datetime
@@ -20,6 +21,7 @@ def prepare_data(filtered_transactions):
     #group by item and day, return summary stats of discount table
     purchases_grouped = filtered_transactions.groupby(["description", "day"]).describe()
     pp = purchases_grouped["purchase_price"]["mean"]
+    std_p = purchases_grouped["std_sales_price"]["mean"]
     purchases = purchases_grouped["discount"]
     #add months column
     purchases["month"] = [purchases.index[i][1].month_name() for i in range(purchases.shape[0])]
@@ -31,16 +33,24 @@ def prepare_data(filtered_transactions):
     purchases["dayofweek"] = [purchases.index[i][1].dayofweek for i in range(purchases.shape[0])]
     purchases["dayofweek"].replace({0:"Monday", 1:"Tuesday", 2:"Wednesday", 3:"Thursday", 4:"Friday", 5:"Saturday", 6:"Sunday"}, inplace=True)
     purchases["purchase_price"] = pp
+    purchases["std_sales_price"] = std_p
     purchases.rename(columns={"mean":"discount"}, inplace=True)
     #add square of discount as extra predictor
     purchases["discount_2"] = purchases["discount"]**2
+    purchases["prev_day_purchases"] = purchases["count"].shift(1)
+    purchases["prev_day_purchases"].iloc[0] = 0
+
+    if type(discounts_per_day) != pd.core.frame.DataFrame:
+        return purchases
+    else:
+        full_purchases = purchases.join(discounts_per_day.set_index("day"))
+        return full_purchases
 
     # TODO:other features: standard price, purchase price
     #take logarithm of price and log of count 
     # run it for one product only
     # find a t-test for coefficients
 
-    return purchases
 
 
 def fit_ohc(pd_column):
@@ -58,11 +68,16 @@ def prepare_demand_function(df_prepared):
     product, weekday and months one hot encoding
     """
     #columns used as predictors
-    pred_columns = ["discount", "discount_2", "purchase_price"]
+    pred_columns = ["discount", "discount_2", "purchase_price", "prev_day_purchases", "on_discount"]
     target_col = "count"
     #encoding products
     # TODO: see if works with only one product
-    df_products, enc_product = fit_ohc(df_prepared[["product"]])
+    unique_products = df_prepared["product"].unique()
+    if len(unique_products) > 1:
+        df_products, enc_product = fit_ohc(df_prepared[["product"]])
+    else: 
+        df_products = pd.DataFrame()
+        enc_product = None
     #encoding weekdays
     df_weekday, enc_weekday = fit_ohc(df_prepared[["dayofweek"]])    
     #encoding months
@@ -72,7 +87,7 @@ def prepare_demand_function(df_prepared):
     df_products, df_weekday, df_months], axis=1)
     # index at which we want to split (20%split)
     full_df.dropna(inplace=True)
-    split_index = full_df.shape[0] - round(full_df.shape[0]/5)
+    split_index = full_df.shape[0] #- round(full_df.shape[0]/5)
     train, test = full_df[:split_index], full_df[split_index:]
     #separating X and y for train and test set
     X_train = pd.concat([train[pred_columns], train.filter(regex="x0_")], axis=1)
@@ -98,10 +113,13 @@ def fit_demand_function(input_dct, model = Ridge()):
 
     linreg = model
     linreg.fit(X_train, y_train)
-    mae = mean_absolute_error(y_test, linreg.predict(X_test))
-    mse = mean_squared_error(y_test, linreg.predict(X_test))
-    r_score = linreg.score(X_test, y_test)
-    print("Model fitted; test set metrics: MAE: {} MSE: {}, R^2 score: {}".format(mae, mse, r_score))
+    try:
+        mae = mean_absolute_error(y_test, linreg.predict(X_test))
+        mse = mean_squared_error(y_test, linreg.predict(X_test))
+        r_score = linreg.score(X_test, y_test)
+        print("Model fitted; test set metrics: MAE: {} MSE: {}, R^2 score: {}".format(mae, mse, r_score))
+    except(ValueError):
+        print("No valuable test data present")
 
     return linreg
 
