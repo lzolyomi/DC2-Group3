@@ -36,7 +36,7 @@ def prepare_data(filtered_transactions, discounts_per_day=False):
     purchases["std_sales_price"] = std_p
     purchases.rename(columns={"mean":"discount"}, inplace=True)
     #add square of discount as extra predictor
-    purchases["discount_2"] = purchases["discount"]**2
+    #purchases["discount_2"] = purchases["discount"]**2
     purchases["prev_day_purchases"] = purchases["count"].shift(1)
     purchases["prev_day_purchases"].iloc[0] = 0
 
@@ -68,7 +68,8 @@ def prepare_demand_function(df_prepared):
     product, weekday and months one hot encoding
     """
     #columns used as predictors
-    pred_columns = ["discount", "discount_2", "purchase_price", "prev_day_purchases", "on_discount"]
+    #ADD discount^2 back
+    pred_columns = ["discount", "purchase_price", "prev_day_purchases", "on_discount"]
     target_col = "count"
     #encoding products
     # TODO: see if works with only one product
@@ -87,7 +88,7 @@ def prepare_demand_function(df_prepared):
     df_products, df_weekday, df_months], axis=1)
     # index at which we want to split (20%split)
     full_df.dropna(inplace=True)
-    split_index = full_df.shape[0] #- round(full_df.shape[0]/5)
+    split_index = full_df.shape[0] - round(full_df.shape[0]/5)
     train, test = full_df[:split_index], full_df[split_index:]
     #separating X and y for train and test set
     X_train = pd.concat([train[pred_columns], train.filter(regex="x0_")], axis=1)
@@ -131,7 +132,8 @@ def prepare_predictors(df_prep, input_dct):
     #drop na values if any
     df_prep.dropna(inplace=True)
     #columns used for prediction
-    pred_columns = ["discount", "discount_2", "purchase_price", "prev_day_purchases", "on_discount"]
+    #ADD predictor discount^2 back if needed
+    pred_columns = ["discount",  "purchase_price", "prev_day_purchases", "on_discount"]
     target_col = "count"
     #convert one hot encoded products
     df_dayofweek = pd.DataFrame(input_dct["weekday_enc"].transform(df_prep[["dayofweek"]]), columns=input_dct["weekday_enc"].get_feature_names())
