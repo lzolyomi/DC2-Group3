@@ -17,3 +17,10 @@ def disc_per_day(transactions):
     discount_per_day["day"] = pd.to_datetime(discount_per_day.index, dayfirst=True)
 
     return discount_per_day
+
+def apply_discount(predictors, applicable_discount):
+    """
+    Accepts a dataframe formatted for prediction and applies (further) discounts to it
+    before prediction
+    """
+    predictors 

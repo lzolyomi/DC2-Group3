@@ -128,4 +128,20 @@ def prepare_predictors(df_prep, input_dct):
     accepts a dataframe prepared by the `prepare_data` function, and a dict with the onehot encoders
     returns a formatted dataframe suitable for predicting with the linear regr
     """
+    #drop na values if any
+    df_prep.dropna(inplace=True)
+    #columns used for prediction
+    pred_columns = ["discount", "discount_2", "purchase_price", "prev_day_purchases", "on_discount"]
+    target_col = "count"
+    #convert one hot encoded products
+    df_dayofweek = pd.DataFrame(input_dct["weekday_enc"].transform(df_prep[["dayofweek"]]), columns=input_dct["weekday_enc"].get_feature_names())
+    df_month = pd.DataFrame(input_dct["months_enc"].transform(df_prep[["month"]]), columns=input_dct["months_enc"].get_feature_names())
+    #if multiple products present one-hot enode them
+    nr_products = len(df_prep["product"].unique())
+    if nr_products > 1:
+        df_product = pd.DataFrame(input_dct["product_enc"].transform(df_prep[["product"]]), columns=input_dct["product_enc"].get_feature_names())
+    else:
+        df_product = pd.DataFrame()
+    X_pred = pd.concat([pd.DataFrame(df_prep[pred_columns].values, columns=df_prep[pred_columns].columns), df_dayofweek, df_month], axis=1)
     
+    return X_pred
