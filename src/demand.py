@@ -4,7 +4,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
-def prepare_data(filtered_transactions, discounts_per_day=False):
+def prepare_data(filtered_transactions, discounts_per_day=False, complimentary_products=False, full_transactions = None):
     """
     The function accepts a filtered version of the transactions dataframe,
     and prepares it for a demand function
@@ -40,6 +40,16 @@ def prepare_data(filtered_transactions, discounts_per_day=False):
     purchases["prev_day_purchases"] = purchases["count"].shift(1)
     purchases["prev_day_purchases"].iloc[0] = 0
 
+    if type(complimentary_products) != bool:
+        print("compl_product is a string")
+        compl_product = calc_sales(full_transactions, complimentary_products)
+        purchases = purchases.join(compl_product.set_index("day"))
+        if type(complimentary_products) == list:
+            for product in complimentary_products:
+                compl_product = calc_sales(full_transactions, product)
+                compl_product.rename(columns={"sales":product})
+                purchases.join(compl_product.set_index("day"))
+
     if type(discounts_per_day) != pd.core.frame.DataFrame:
         return purchases
     else:
@@ -69,7 +79,7 @@ def prepare_demand_function(df_prepared):
     """
     #columns used as predictors
     #ADD discount^2 back
-    pred_columns = ["discount", "purchase_price", "prev_day_purchases", "on_discount"]
+    pred_columns = ["discount", "purchase_price", "prev_day_purchases", "on_discount", "sales"]
     target_col = "count"
     #encoding products
     # TODO: see if works with only one product
@@ -133,7 +143,7 @@ def prepare_predictors(df_prep, input_dct):
     df_prep.dropna(inplace=True)
     #columns used for prediction
     #ADD predictor discount^2 back if needed
-    pred_columns = ["discount",  "purchase_price", "prev_day_purchases", "on_discount"]
+    pred_columns = ["discount",  "purchase_price", "prev_day_purchases", "on_discount", "sales"]
     target_col = "count"
     #convert one hot encoded products
     df_dayofweek = pd.DataFrame(input_dct["weekday_enc"].transform(df_prep[["dayofweek"]]), columns=input_dct["weekday_enc"].get_feature_names())
@@ -147,3 +157,15 @@ def prepare_predictors(df_prep, input_dct):
     X_pred = pd.concat([pd.DataFrame(df_prep[pred_columns].values, columns=df_prep[pred_columns].columns), df_dayofweek, df_month], axis=1)
     
     return X_pred
+
+
+def calc_sales(transactions, product):
+    """
+    creates a table of the daily sales of the product. can be used to join to demand table
+    """
+
+    filt_transactions = transactions[transactions["description"] == product]
+    filt_transactions["day"] = pd.to_datetime(filt_transactions["day"], dayfirst=True)
+    grouped = filt_transactions.groupby("day").mean()["purchase_price"]
+    compl_sales = pd.DataFrame({"sales":grouped.values, "day":grouped.index})
+    return compl_sales
