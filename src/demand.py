@@ -169,3 +169,15 @@ def calc_sales(transactions, product):
     grouped = filt_transactions.groupby("day").mean()["purchase_price"]
     compl_sales = pd.DataFrame({"sales":grouped.values, "day":grouped.index})
     return compl_sales
+
+
+def calc_purchases(transactions, product):
+    """
+    creates a table of the daily purchases of the product. can be used to join to demand table
+    """
+
+    filt_transactions = transactions[transactions["description"] == product]
+    filt_transactions["day"] = pd.to_datetime(filt_transactions["day"], dayfirst=True)
+    grouped = filt_transactions.groupby("day").count()["purchase_price"]
+    compl_sales = pd.DataFrame({"sales":grouped.values, "day":grouped.index})
+    return compl_sales
