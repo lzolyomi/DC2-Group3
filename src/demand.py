@@ -9,10 +9,12 @@ def prepare_data(filtered_transactions, discounts_per_day=False, complimentary_p
     The function accepts a filtered version of the transactions dataframe,
     and prepares it for a demand function
     OPTIONAL: supply the discounts_per_day dataframe for added predictor
+    OPTIONAL: give a complimentary product name and supply the whole transactions dataset
+    to add prices of copml. product
     """
 
     #converts day to datetime
-    filtered_transactions["day"] = pd.to_datetime(filtered_transactions["day"])
+    filtered_transactions["day"] = pd.to_datetime(filtered_transactions["day"], dayfirst=True)
 
     #adds discount column
     filtered_transactions["discount"] = 100-(
@@ -28,7 +30,7 @@ def prepare_data(filtered_transactions, discounts_per_day=False, complimentary_p
     #add product column containing the name of each item
     purchases["product"] = [purchases.index[i][0] for i in range(purchases.shape[0])]
     #add day of year (for plotting reasons)
-    purchases["day"] = [purchases.index[i][1].dayofyear for i in range(purchases.shape[0])]
+    purchases["DOY"] = [purchases.index[i][1].dayofyear-1 for i in range(purchases.shape[0])]
     #add day of week for predictor
     purchases["dayofweek"] = [purchases.index[i][1].dayofweek for i in range(purchases.shape[0])]
     purchases["dayofweek"].replace({0:"Monday", 1:"Tuesday", 2:"Wednesday", 3:"Thursday", 4:"Friday", 5:"Saturday", 6:"Sunday"}, inplace=True)
@@ -49,7 +51,7 @@ def prepare_data(filtered_transactions, discounts_per_day=False, complimentary_p
                 compl_product = calc_sales(full_transactions, product)
                 compl_product.rename(columns={"sales":product})
                 purchases.join(compl_product.set_index("day"))
-
+    
     if type(discounts_per_day) != pd.core.frame.DataFrame:
         return purchases
     else:
@@ -79,7 +81,14 @@ def prepare_demand_function(df_prepared):
     """
     #columns used as predictors
     #ADD discount^2 back
-    pred_columns = ["discount", "purchase_price", "prev_day_purchases", "on_discount", "sales"]
+    colnames = df_prepared.columns
+    pred_columns = ["discount", "purchase_price", "prev_day_purchases"]
+    #append extra predictor columns if present
+    if "sales" in colnames:
+        pred_columns.append("sales")
+    if "on_discount" in colnames:
+        pred_columns.append("on_discount")
+
     target_col = "count"
     #encoding products
     # TODO: see if works with only one product
@@ -143,7 +152,13 @@ def prepare_predictors(df_prep, input_dct):
     df_prep.dropna(inplace=True)
     #columns used for prediction
     #ADD predictor discount^2 back if needed
-    pred_columns = ["discount",  "purchase_price", "prev_day_purchases", "on_discount", "sales"]
+    colnames = df_prep.columns
+    pred_columns = ["discount",  "purchase_price", "prev_day_purchases"]
+    if "on_discount" in colnames:
+        pred_columns.append("on_discount")
+    if "sales" in colnames:
+        pred_columns.append("sales")
+    
     target_col = "count"
     #convert one hot encoded products
     df_dayofweek = pd.DataFrame(input_dct["weekday_enc"].transform(df_prep[["dayofweek"]]), columns=input_dct["weekday_enc"].get_feature_names())
