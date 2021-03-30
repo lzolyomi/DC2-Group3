@@ -5,7 +5,7 @@ import ast
 from sklearn.linear_model import Ridge
 
 from demand import *
-from discounts import apply_discount, disc_per_day
+from discounts import apply_discount, disc_per_day, discount_bins
 
 def create_bb_data(inventory, product):
     """
@@ -52,7 +52,6 @@ def add_purchases(df_waste, transactions, product):
     waste_df['purchases'] = waste_df["cumulative purchases"].diff()
     waste_df["remaining"] = waste_df["amount"] - waste_df['purchases']
     waste_df["remaining"].iloc[0] = waste_df["amount"].iloc[0]-waste_df["cumulative purchases"].iloc[0]
-    print(waste_df.shape)
     length = waste_df.shape[0]
     lst_waste = []
     for i in range(length):
@@ -109,26 +108,31 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     pred_values = []
     opt_values = []
     avg_salesprice = []
+    std_price = []
     i = 0
     for rang in ranges:
-        #TODO: create new column of average price
-        
+
         df_frange = prep_transactions[(prep_transactions["DOY"] >= rang[0]) & (prep_transactions["DOY"] <= rang[1])]
         #sum of all sales_price*purchases
         prices = (df_frange["count"]*df_frange["purchase_price"]).sum()
         #nr of purchases 
         purchases = df_frange["count"].sum()
-        try:
+        try: #needed for value errors in the last 3 rows
             frange_prepared = prepare_predictors(df_frange, input_dct)
             est_demand = model.predict(frange_prepared).sum()
             pred_values.append(round(est_demand))
-            #TODO: add discounts 
+            #TODO: predict values before 2 days, calculate ratio
             if df_waste.iloc[i]["waste"] > 0: #if there is waste
                 frange_mod = frange_prepared.copy() #copy of the prepared df for appliying discounts
                 last = len(frange_mod)-1
-                frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],50) #day before goes bad
-                frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],50) #actual day it goes bad
-                
+                #items purchases from batch 2days before going bad
+                purchases_before_disc = pd.DataFrame(df_frange.values, columns=df_frange.columns).loc[:last-2]["count"].sum()
+                batch_size = df_waste.iloc[i]["amount"] #size of shipment received
+                sold_ratio = purchases_before_disc/batch_size
+                disc_levels = discount_bins(sold_ratio)
+                frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],disc_levels[0]) #day before goes bad
+                frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],disc_levels[1]) #actual day it goes bad
+                #print("Ratio of sold/shipment is {}".format(sold_ratio))
                 est_mod_demand = model.predict(frange_mod).sum()
                 ratio = float(est_mod_demand/est_demand)
                 sales_prices = (frange_mod["purchase_price"].values*(df_frange["count"].values*ratio)).sum()
@@ -141,6 +145,7 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
                 opt_values.append(round(est_demand))
                 avg_salesprice.append(prices/purchases)
                 i += 1
+            std_price.append(frange_prepared["purchase_price"].mean())
         except(ValueError):
             print("Value error occurred")
             
@@ -149,8 +154,10 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     df_waste["demand_discounts"] = opt_values
     ratio=sum(opt_values)/sum(pred_values)
     df_waste["avg_price"] = avg_salesprice
+    df_waste["std_price"] = std_price
     df_waste["expected purchases"] = round(df_waste["purchases"]*ratio)
-    df_waste["expected waste"] = df_waste["waste"] - (df_waste["expected purchases"]-df_waste["purchases"])
+    df_waste["expected waste"] = df_waste["waste"] - (df_waste["expected purchases"]-df_waste["purchases"]) 
+    #TODO: if negative excess amount CHECK
     df_waste["expected waste"] = df_waste[df_waste["expected waste"] > 0]["expected waste"]
 
     return df_waste
@@ -170,10 +177,12 @@ def waste_analysis(inventory, transactions, df_product, product:str, model = Rid
     waste_df_ext = add_purchases(waste_df, transactions, product)
     print("Extended waste dataframe created")
     ranges = get_ranges(inventory, product)
-    if discount_per_day == None:
-        discounts_per_day = disc_per_day(transactions)
-    else:
+    if type(discount_per_day) == pd.core.frame.DataFrame:
         discounts_per_day = discount_per_day.copy()
+    else:
+        print("No daily discount table supplied, calculating...")
+        discounts_per_day = disc_per_day(transactions)
+    #TODO: add fix to complimentary product
     prepared_transactions = prepare_data(filtered_transactions, discounts_per_day=discounts_per_day)
     print("Data prepared for prediction")
     output_dct = prepare_demand_function(prepared_transactions)
@@ -183,12 +192,12 @@ def waste_analysis(inventory, transactions, df_product, product:str, model = Rid
     print("Waste change predicted, calculating revenue loss...")
     purchase_price = df_product[df_product["description"] == product]["purchase_price"].values
     waste_df_ext.fillna({"expected waste":0}, inplace=True)
-    waste_df_ext["expected loss revenue"] = waste_df_ext["expected waste"]*waste_df_ext["avg_price"]
+    waste_df_ext["expected loss revenue"] = (waste_df_ext["expected waste"]*waste_df_ext["avg_price"]).round(2)
     waste_df_ext["expected loss profit"] = waste_df_ext["expected waste"]*(waste_df_ext["avg_price"]-purchase_price)
     waste_df_ext["expected waste cost"] = waste_df_ext["expected waste"]*purchase_price
-
-    waste_df_ext["loss revenue"] = waste_df_ext["waste nn"]*waste_df_ext["avg_price"]
-    waste_df_ext["loss profit"] = waste_df_ext["waste nn"]*(waste_df_ext["avg_price"]-purchase_price)
+    #TODO: fix average price
+    waste_df_ext["loss revenue"] = waste_df_ext["waste nn"]*waste_df_ext["std_price"]
+    waste_df_ext["loss profit"] = waste_df_ext["waste nn"]*(waste_df_ext["std_price"]-purchase_price)
     waste_df_ext["waste cost"] = waste_df_ext["waste nn"]*purchase_price
 
     return waste_df_ext
