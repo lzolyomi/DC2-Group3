@@ -2,4 +2,3 @@
 *.csv
 /.vscode
 *.png
-*/__pycache__

@@ -39,20 +39,3 @@ def apply_discount(input_predictors, applicable_discount):
         predictors["purchase_price"] = predictors["purchase_price"]*predictors["purchase_price"]*(1-predictors["discount"]/100)
     predictors["on_discount"] = predictors["on_discount"]+1
     return predictors
-
-
-def discount_bins(sold_ratio):
-    """
-    For a given sold_ratio, returns a tuple of discount levels, predetermined by the ratio
-    """
-    if sold_ratio < 0.1:
-        discounts = (25,40)
-    elif sold_ratio < 0.2:
-        discounts = (20,30)
-    elif sold_ratio < 0.4:
-        discounts = (20, 20)
-    elif sold_ratio < 0.6:
-        discounts = (10,20)
-    else:
-        discounts = (0,10)
-    return discounts

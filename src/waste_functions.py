@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd 
 import datetime
+<<<<<<< HEAD
 import ast 
 from sklearn.linear_model import Ridge
 import statistics as stat
@@ -8,6 +9,10 @@ import statistics as stat
 from demand import *
 from discounts import apply_discount, disc_per_day, discount_bins
 
+=======
+from demand import prepare_predictors
+from discounts import apply_discount
+>>>>>>> f2f5098c9d23210b12c5f61ac8d91496c37d8df7
 def create_bb_data(inventory, product):
     """
     For a given product it returns a dataframe containing extensive info about wasted items
@@ -53,6 +58,7 @@ def add_purchases(df_waste, transactions, product):
     waste_df['purchases'] = waste_df["cumulative purchases"].diff()
     waste_df["remaining"] = waste_df["amount"] - waste_df['purchases']
     waste_df["remaining"].iloc[0] = waste_df["amount"].iloc[0]-waste_df["cumulative purchases"].iloc[0]
+    print(waste_df.shape)
     length = waste_df.shape[0]
     lst_waste = []
     for i in range(length):
@@ -108,19 +114,23 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     """
     pred_values = []
     opt_values = []
+<<<<<<< HEAD
     avg_salesprice = []
     std_price = []
     estimated_ratios = []
     i = 0
+=======
+>>>>>>> f2f5098c9d23210b12c5f61ac8d91496c37d8df7
     for rang in ranges:
-
+        #TODO: check if there is actual waste and only apply discounts then
         df_frange = prep_transactions[(prep_transactions["DOY"] >= rang[0]) & (prep_transactions["DOY"] <= rang[1])]
-        #sum of all sales_price*purchases
-        prices = (df_frange["count"]*df_frange["purchase_price"]).sum()
-        #nr of purchases 
-        purchases = df_frange["count"].sum()
-        try: #needed for value errors in the last 3 rows
+        try:
             frange_prepared = prepare_predictors(df_frange, input_dct)
+            #TODO: add discounts 
+            frange_mod = frange_prepared.copy() #copy of the prepared df for appliying discounts
+            last = len(frange_mod)-1
+            frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],30)
+            frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],20)
             est_demand = model.predict(frange_prepared).sum()
             # >>>> used to determine whether we expecct any waste
             last = len(df_frange)-1 #index of last element, i.e. day it goes bad
@@ -165,9 +175,7 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
             i += 1
             std_price.append(frange_prepared["purchase_price"].mean())
         except(ValueError):
-            print("Value error occurred")
-            
-
+            pass
     df_waste["predicted demand"] = pred_values
     df_waste["demand_discounts"] = opt_values
     ratio=sum(opt_values)/sum(pred_values)
