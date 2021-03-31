@@ -29,7 +29,19 @@ def create_bb_data(inventory, product):
                     if batch[0] == row["best before day"]:
                         return batch[1]
     df_waste["amount"] = df_waste.apply(input_inv, axis=1)
-    #TODO: add purchases, interval and cumulative
+    def total_inv(row):
+        total = 0
+        if len(row[product]) > 0:
+            for batch in row[product]:
+                total += batch[1]
+        return total
+    filter_inventory["total inventory"] = filter_inventory.apply(total_inv, axis = 1)
+
+    df_waste['total_inventory'] = [int(filter_inventory.loc[filter_inventory[(filter_inventory['before or after delivery'] == 'before') & (filter_inventory['day'] == day)].index[0],
+     'total inventory']) if len(filter_inventory[(filter_inventory['before or after delivery'] == 'before') & (filter_inventory['day'] == day)].index) > 0
+      else None for day in df_waste['best before day']]
+
+    df_waste['remaining_stock'] = df_waste['total_inventory'] - df_waste['amount']
     df_waste["best before day"] = df_waste["best before day"]
     return df_waste
 
@@ -123,8 +135,6 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
             #TODO: add discounts 
             frange_mod = frange_prepared.copy() #copy of the prepared df for appliying discounts
             last = len(frange_mod)-1
-            frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],30)
-            frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],20)
             est_demand = model.predict(frange_prepared).sum()
             # >>>> used to determine whether we expecct any waste
             last = len(df_frange)-1 #index of last element, i.e. day it goes bad
@@ -221,4 +231,3 @@ def waste_analysis(inventory, transactions, df_product, product:str, model = Rid
     waste_df_ext["waste cost"] = waste_df_ext["waste nn"]*purchase_price
 
     return waste_df_ext
-
