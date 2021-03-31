@@ -1,18 +1,13 @@
 import numpy as np
 import pandas as pd 
 import datetime
-<<<<<<< HEAD
 import ast 
 from sklearn.linear_model import Ridge
 import statistics as stat
 
 from demand import *
-from discounts import apply_discount, disc_per_day, discount_bins
+from discounts import *
 
-=======
-from demand import prepare_predictors
-from discounts import apply_discount
->>>>>>> f2f5098c9d23210b12c5f61ac8d91496c37d8df7
 def create_bb_data(inventory, product):
     """
     For a given product it returns a dataframe containing extensive info about wasted items
@@ -114,16 +109,15 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     """
     pred_values = []
     opt_values = []
-<<<<<<< HEAD
     avg_salesprice = []
     std_price = []
     estimated_ratios = []
     i = 0
-=======
->>>>>>> f2f5098c9d23210b12c5f61ac8d91496c37d8df7
     for rang in ranges:
         #TODO: check if there is actual waste and only apply discounts then
         df_frange = prep_transactions[(prep_transactions["DOY"] >= rang[0]) & (prep_transactions["DOY"] <= rang[1])]
+        purchases = df_frange["count"].sum()
+        prices = (df_frange["count"]*df_frange["purchase_price"]).sum()
         try:
             frange_prepared = prepare_predictors(df_frange, input_dct)
             #TODO: add discounts 
