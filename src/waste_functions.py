@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import ast 
 from sklearn.linear_model import Ridge
+import statistics as stat
 
 from demand import *
 from discounts import apply_discount, disc_per_day, discount_bins
@@ -109,6 +110,7 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     opt_values = []
     avg_salesprice = []
     std_price = []
+    estimated_ratios = []
     i = 0
     for rang in ranges:
 
@@ -120,31 +122,47 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
         try: #needed for value errors in the last 3 rows
             frange_prepared = prepare_predictors(df_frange, input_dct)
             est_demand = model.predict(frange_prepared).sum()
-            pred_values.append(round(est_demand))
-            #TODO: predict values before 2 days, calculate ratio
-            if df_waste.iloc[i]["waste"] > 0: #if there is waste
-                frange_mod = frange_prepared.copy() #copy of the prepared df for appliying discounts
-                last = len(frange_mod)-1
+            # >>>> used to determine whether we expecct any waste
+            last = len(df_frange)-1 #index of last element, i.e. day it goes bad
+            
+            if last > 1:#only if range has at least two days where we can apply discounts
                 #items purchases from batch 2days before going bad
                 purchases_before_disc = pd.DataFrame(df_frange.values, columns=df_frange.columns).loc[:last-2]["count"].sum()
-                batch_size = df_waste.iloc[i]["amount"] #size of shipment received
-                sold_ratio = purchases_before_disc/batch_size
-                disc_levels = discount_bins(sold_ratio)
-                frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],disc_levels[0]) #day before goes bad
-                frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],disc_levels[1]) #actual day it goes bad
-                #print("Ratio of sold/shipment is {}".format(sold_ratio))
-                est_mod_demand = model.predict(frange_mod).sum()
-                ratio = float(est_mod_demand/est_demand)
-                sales_prices = (frange_mod["purchase_price"].values*(df_frange["count"].values*ratio)).sum()
-                purchases = df_frange["count"].sum()*ratio
-                avg = sales_prices/purchases
-                opt_values.append(round(est_mod_demand))
-                
-                avg_salesprice.append(avg)
+                predictions_before_disc = model.predict(frange_prepared.loc[:last-2]).sum()
+                #prediction of demand for the last two days
+                pred_last_days = model.predict((frange_prepared.loc[last-1:])*(purchases_before_disc/predictions_before_disc)).sum()
+                #print("Ratio between actual purchases/estimated: {}".format(purchases_before_disc/predictions_before_disc))
+                estimated_ratios.append(purchases_before_disc/predictions_before_disc)
+                #purchases in the last two days used to determine inventory before the days
+                actual_last_days = pd.DataFrame(df_frange.values, columns=df_frange.columns).loc[last-1:]["count"].sum()
+                remaining_inv = df_waste.iloc[i]["remaining"].sum() + actual_last_days #products remain 2days before going bad
+                #TODO: predict values before 2 days, calculate ratio
+                if (remaining_inv - pred_last_days) > 0: #if we have expected waste waste
+                    frange_mod = frange_prepared.copy() #copy of the prepared df for appliying discounts
+                    batch_size = df_waste.iloc[i]["amount"] #size of shipment received
+                    sold_ratio = purchases_before_disc/batch_size
+                    disc_levels = discount_bins(sold_ratio)
+                    frange_mod.loc[last-1:last-1] = apply_discount(frange_mod.loc[last-1:last-1],disc_levels[0]) #day before goes bad
+                    frange_mod.loc[last:last] = apply_discount(frange_mod.loc[last:last],disc_levels[1]) #actual day it goes bad
+                    #print("Ratio of sold/shipment is {}".format(sold_ratio))
+                    est_mod_demand = model.predict(frange_mod).sum()
+                    ratio = float(est_mod_demand/est_demand)
+                    
+                    sales_prices = (frange_mod["purchase_price"].values*(df_frange["count"].values*ratio)).sum()
+                    purchases = df_frange["count"].sum()*ratio
+                    avg = sales_prices/purchases
+                    opt_values.append(round(est_mod_demand))
+                    
+                    avg_salesprice.append(avg)
+                else:
+                    opt_values.append(round(est_demand))
+                    avg_salesprice.append(prices/purchases)
+                    
             else:
                 opt_values.append(round(est_demand))
                 avg_salesprice.append(prices/purchases)
-                i += 1
+            pred_values.append(round(est_demand))
+            i += 1
             std_price.append(frange_prepared["purchase_price"].mean())
         except(ValueError):
             print("Value error occurred")
@@ -159,11 +177,11 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
     df_waste["expected waste"] = df_waste["waste"] - (df_waste["expected purchases"]-df_waste["purchases"]) 
     #TODO: if negative excess amount CHECK
     df_waste["expected waste"] = df_waste[df_waste["expected waste"] > 0]["expected waste"]
-
+    print("Average of actual/estimated purchase ratios: {}".format(stat.mean(estimated_ratios)))
     return df_waste
 
 
-def waste_analysis(inventory, transactions, df_product, product:str, model = Ridge(), discount_per_day=None):
+def waste_analysis(inventory, transactions, df_product, product:str, model = Ridge(), discount_per_day=None, compl_prod=False):
     """
     Contains every function that is needed to return the analysis in the combininb_waste notebook
     """
@@ -183,7 +201,7 @@ def waste_analysis(inventory, transactions, df_product, product:str, model = Rid
         print("No daily discount table supplied, calculating...")
         discounts_per_day = disc_per_day(transactions)
     #TODO: add fix to complimentary product
-    prepared_transactions = prepare_data(filtered_transactions, discounts_per_day=discounts_per_day)
+    prepared_transactions = prepare_data(filtered_transactions, discounts_per_day=discounts_per_day, complimentary_products=compl_prod, full_transactions=transactions)
     print("Data prepared for prediction")
     output_dct = prepare_demand_function(prepared_transactions)
     model = fit_demand_function(output_dct, model)
