@@ -112,7 +112,8 @@ def get_ranges(inventory, product):
         if i < len(bb_dates)-1:
             i += 1
             ret_tupl = (item, bb_dates[i])
-            ranges.append(ret_tupl)
+            if bb_dates[i] < 365: #we don't have any purchases  when year is 366 long
+                ranges.append(ret_tupl)
     return ranges
 
 def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
@@ -138,7 +139,6 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
             est_demand = model.predict(frange_prepared).sum()
             # >>>> used to determine whether we expecct any waste
             last = len(df_frange)-1 #index of last element, i.e. day it goes bad
-            
             if last > 1:#only if range has at least two days where we can apply discounts
                 #items purchases from batch 2days before going bad
                 purchases_before_disc = pd.DataFrame(df_frange.values, columns=df_frange.columns).loc[:last-2]["count"].sum()
@@ -178,9 +178,17 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
             pred_values.append(round(est_demand))
             i += 1
             std_price.append(frange_prepared["purchase_price"].mean())
+            
         except(ValueError):
+            if len(opt_values) < df_waste.shape[0]-1: #if range does not have any purchases from the given product
+                opt_values.append(0)
+                avg_salesprice.append(0)
+                std_price.append(0)
+
+            print("Value error occured at range {}".format(rang))
             pass
-    df_waste["predicted demand"] = pred_values
+        
+    #df_waste["predicted demand"] = pred_values
     df_waste["demand_discounts"] = opt_values
     ratio=sum(opt_values)/sum(pred_values)
     df_waste["avg_price"] = avg_salesprice
