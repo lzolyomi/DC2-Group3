@@ -22,7 +22,6 @@ def apply_discount(input_predictors, applicable_discount):
     """
     Accepts a dataframe formatted for prediction and applies (further) discounts to it
     before prediction
-    ONLY WORKS FOR ONE ROW/rows where no discount is present
     """
     predictors = input_predictors.copy()
     if sum(predictors["discount"]) < 1:
@@ -31,7 +30,6 @@ def apply_discount(input_predictors, applicable_discount):
         #predictors["discount_2"] = applicable_discount**2
         predictors["purchase_price"] = predictors["purchase_price"]*(1-applicable_discount/100)
     else:
-        #TODO: add loop for individual items with/without discount
         predictors["purchase_price"] = predictors["purchase_price"]/(1-predictors["discount"]/100) #get original purchase price
 
         predictors["discount"] = predictors["discount"] + applicable_discount
@@ -43,6 +41,7 @@ def apply_discount(input_predictors, applicable_discount):
 def discount_bins(sold_ratio):
     """
     For a given sold_ratio, returns a tuple of discount levels, predetermined by the ratio
+    NOTE: it is possible to modify discounts and split points freely to see the changes
     """
     if sold_ratio < 0.1:
         discounts = (25,40)

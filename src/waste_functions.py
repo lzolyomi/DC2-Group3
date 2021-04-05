@@ -188,7 +188,7 @@ def predicted_demand(df_waste, ranges, model, input_dct, prep_transactions):
             print("Value error occured at range {}".format(rang))
             pass
         
-    #df_waste["predicted demand"] = pred_values
+    df_waste["predicted demand"] = pred_values
     df_waste["demand_discounts"] = opt_values
     ratio=sum(opt_values)/sum(pred_values)
     df_waste["avg_price"] = avg_salesprice

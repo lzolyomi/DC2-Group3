@@ -58,11 +58,6 @@ def prepare_data(filtered_transactions, discounts_per_day=False, complimentary_p
         full_purchases = purchases.join(discounts_per_day.set_index("day"))
         return full_purchases
 
-    # TODO:other features: standard price, purchase price
-    #take logarithm of price and log of count 
-    # run it for one product only
-    # find a t-test for coefficients
-
 
 
 def fit_ohc(pd_column):
